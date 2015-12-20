@@ -26,13 +26,13 @@
 
 package org.codehaus.commons.compiler.jdk;
 
-import java.io.IOException;
-import java.io.Reader;
+import java.io.*;
 import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.AccessController;
 import java.security.PrivilegedAction;
 import java.util.Collections;
+import java.util.List;
 
 import javax.tools.Diagnostic;
 import javax.tools.DiagnosticListener;
@@ -55,13 +55,13 @@ import org.codehaus.commons.compiler.WarningHandler;
 public
 class SimpleCompiler extends Cookable implements ISimpleCompiler {
 
-    private ClassLoader    parentClassLoader = Thread.currentThread().getContextClassLoader();
-    private ClassLoader    result;
-    private boolean        debugSource;
-    private boolean        debugLines;
-    private boolean        debugVars;
-    private ErrorHandler   optionalCompileErrorHandler;
-    private WarningHandler optionalWarningHandler;
+    protected ClassLoader    parentClassLoader = Thread.currentThread().getContextClassLoader();
+    protected ClassLoader    result;
+    protected boolean        debugSource;
+    protected boolean        debugLines;
+    protected boolean        debugVars;
+    protected ErrorHandler   optionalCompileErrorHandler;
+    protected WarningHandler optionalWarningHandler;
 
     @Override public ClassLoader
     getClassLoader() { this.assertCooked(); return this.result; }
@@ -75,30 +75,31 @@ class SimpleCompiler extends Cookable implements ISimpleCompiler {
         {
             URI uri;
             try {
-                uri = new URI("simplecompiler");
+                uri = new URI(optionalFileName!=null ? "file:///"+optionalFileName : "simplecompiler");
             } catch (URISyntaxException use) {
                 throw new RuntimeException(use);
             }
+            final String source = Cookable.readString(r);
             compilationUnit = new SimpleJavaFileObject(uri, Kind.SOURCE) {
 
                 @Override public boolean
                 isNameCompatible(String simpleName, Kind kind) { return true; }
 
-                @Override public Reader
-                openReader(boolean ignoreEncodingErrors) throws IOException { return r; }
-
                 @Override public CharSequence
                 getCharContent(boolean ignoreEncodingErrors) throws IOException {
-                    return Cookable.readString(this.openReader(ignoreEncodingErrors));
+                    return source;
+                }
+
+                @Override
+                public InputStream openInputStream() throws IOException {
+                    return new ByteArrayInputStream(source.getBytes());
                 }
 
                 @Override public String
                 toString() { return String.valueOf(this.uri); }
             };
         }
-
-        // Find the JDK Java compiler.
-        JavaCompiler compiler = ToolProvider.getSystemJavaCompiler();
+        JavaCompiler compiler = getJavaCompiler();
         if (compiler == null) {
             throw new CompileException(
                 "JDK Java compiler not available - probably you're running a JRE, not a JDK",
@@ -168,16 +169,8 @@ class SimpleCompiler extends Cookable implements ISimpleCompiler {
                         }
                     }
                 },
-                Collections.singletonList(                 // options
-                    this.debugSource
-                    ? "-g:source" + (this.debugLines ? ",lines" : "") + (this.debugVars ? ",vars" : "")
-                    : this.debugLines
-                    ? "-g:lines" + (this.debugVars ? ",vars" : "")
-                    : this.debugVars
-                    ? "-g:vars"
-                    : "-g:none"
-                ),
-                null,                                      // classes
+                getOptions(),
+                getClasses(),
                 Collections.singleton(compilationUnit)     // compilationUnits
             ).call()) {
                 if (caughtCompileException[0] != null) throw caughtCompileException[0];
@@ -196,13 +189,40 @@ class SimpleCompiler extends Cookable implements ISimpleCompiler {
             }
             throw rte;
         }
-
         // Create a ClassLoader that reads class files from our FM.
-        this.result = AccessController.doPrivileged(new PrivilegedAction<JavaFileManagerClassLoader>() {
+        this.result = getJavaFileClassLoader(fileManager, this.parentClassLoader);
+    }
+
+    protected JavaCompiler getJavaCompiler() {
+        return CompilerUtil.getJavaCompiler();
+    }
+
+    protected Iterable<String> getClasses() {
+        return null;
+    }
+
+    protected List<String> getOptions() {
+        return Collections.singletonList(                 // options
+            this.debugSource
+            ? "-g:source" + (this.debugLines ? ",lines" : "") + (this.debugVars ? ",vars" : "")
+            : this.debugLines
+            ? "-g:lines" + (this.debugVars ? ",vars" : "")
+            : this.debugVars
+            ? "-g:vars"
+            : "-g:none"
+        );
+    }
+
+    protected JavaFileManagerClassLoader getJavaFileClassLoader(final JavaFileManager fileManager, final ClassLoader parentClassLoader) {
+/*
+        return AccessController.doPrivileged(new PrivilegedAction<JavaFileManagerClassLoader>() {
 
             @Override public JavaFileManagerClassLoader
-            run() { return new JavaFileManagerClassLoader(fileManager, SimpleCompiler.this.parentClassLoader); }
+            run() {
+                return new JavaFileManagerClassLoader(fileManager, parentClassLoader); }
         });
+*/
+        return new JavaFileManagerClassLoader(fileManager, parentClassLoader);
     }
 
     @Override public void

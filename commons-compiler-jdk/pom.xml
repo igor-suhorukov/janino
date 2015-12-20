@@ -19,6 +19,10 @@
       <groupId>org.codehaus.janino</groupId>
       <artifactId>commons-compiler</artifactId>
     </dependency>
+    <dependency>
+      <groupId>de.unkrig</groupId>
+      <artifactId>de-unkrig-commons</artifactId>
+    </dependency>
   </dependencies>
 
   <build>

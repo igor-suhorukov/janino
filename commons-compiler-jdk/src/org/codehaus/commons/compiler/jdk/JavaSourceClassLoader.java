@@ -77,9 +77,9 @@ class JavaSourceClassLoader extends AbstractJavaSourceClassLoader {
     }
 
 
-    private void
+    protected void
     init() {
-        this.compiler = ToolProvider.getSystemJavaCompiler();
+        this.compiler = CompilerUtil.getJavaCompiler();
         if (this.compiler == null) {
             throw new UnsupportedOperationException(
                 "JDK Java compiler not available - probably you're running a JRE, not a JDK"
